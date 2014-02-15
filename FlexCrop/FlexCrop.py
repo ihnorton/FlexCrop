@@ -48,6 +48,7 @@ class FlexCropWidget:
     if not parent:
       self.setup()
       self.parent.show()
+    self.oldTarget = None
 
 ################################################################################
 # Reloading harness
@@ -77,18 +78,113 @@ class FlexCropWidget:
     reloadFormLayout.addWidget(self.reloadAndTestButton)
     self.reloadAndTestButton.connect('clicked()', self.onReloadAndTest)
 
-  def onReload(self,moduleName="FlexCrop"):
-    """Generic reload method for any scripted module.
-    ModuleWizard will subsitute correct default moduleName.
-    """
-    globals()[moduleName] = slicer.util.reloadScriptedModule(moduleName)
-  
+  def set_selector_options(self, node):
+    node.selectNodeUponCreation = True
+    node.addEnabled = False
+    node.removeEnabled = False
+    node.noneEnabled = False
+    node.showHidden = False
+    node.showChildNodeTypes = False
+    
   def onReloadAndTest(self):
     pass
     
   def setup(self):
     # Instantiate and connect widgets ...
     self.make_reloader()
+    self.createMaskFrame()
+    self.createRegFrame()
+    
+    # Add vertical spacer
+    self.layout.addStretch(1)
+
+  def cleanup(self):
+    pass
+  
+  def onReload(self,moduleName="FlexCrop"):
+    """Generic reload method for any scripted module.
+    ModuleWizard will subsitute correct default moduleName.
+    """
+    globals()[moduleName] = slicer.util.reloadScriptedModule(moduleName)
+    
+  def onClearMaskedButton(self):
+    nodes = slicer.util.getNodes("vtkMRMLScalarVolumeNode*")
+    for n in nodes:
+        if "masked" in n:
+            slicer.mrmlScene.RemoveNode(nodes[n])
+
+  def onClearUnmaskedButton(self):
+    nodes = slicer.util.getNodes("vtkMRMLScalarVolumeNode*")
+    for n in nodes:
+        if not "masked" in n:
+            slicer.mrmlScene.RemoveNode(nodes[n])
+            
+  def onSelect(self):
+    self.applyButton.enabled = self.nodeSelector.currentNode()
+
+  def onApplyButton(self):
+    logic = FlexCropLogic()
+    inPlace = self.inPlaceCheckBox.checked
+    logic.run(self.roiSelector.currentNode(), self.nodeSelector.checkedNodes(), inPlace)
+
+  def onTargetSelected(self, node):
+    # apparently this has no effect
+    # http://www.na-mic.org/Bug/view.php?id=3589
+    # self.regVolumesSelector.setUserCheckable(node, True)
+    self.registerButton.enabled = True
+    
+  def onRegisterButton(self):
+    logic = FlexCropLogic()
+    logic.runRegistration(self.regTargetSelector.currentNode(), self.regVolumesSelector.checkedNodes())
+
+  def createRegFrame(self):   
+    #
+    # Parameters Area
+    #
+    regCollapsibleButton = ctk.ctkCollapsibleButton()
+    regCollapsibleButton.text = "Parameters"
+    self.layout.addWidget(regCollapsibleButton)
+
+    # Layout within the dummy collapsible button
+    regFormLayout = qt.QFormLayout(regCollapsibleButton)
+    
+    #
+    # target volume selector
+    #
+    self.regTargetSelector = slicer.qMRMLNodeComboBox()
+    self.regTargetSelector.nodeTypes = ( ("vtkMRMLScalarVolumeNode"), "" )
+    self.regTargetSelector.addAttribute( "vtkMRMLScalarVolumeNode", "LabelMap", 0 )
+    self.set_selector_options(self.regTargetSelector)
+    self.regTargetSelector.setToolTip( "Pick the input to the algorithm." )
+    regFormLayout.addRow("Target Volume: ", self.regTargetSelector)
+
+    #
+    # moving volume selector
+    #
+    self.regVolumesSelector = slicer.qMRMLCheckableNodeComboBox()
+    self.regVolumesSelector.nodeTypes = ( ("vtkMRMLScalarVolumeNode"), "" )
+    self.regVolumesSelector.addAttribute( "vtkMRMLScalarVolumeNode", "LabelMap", 0 )
+    self.set_selector_options(self.regVolumesSelector)
+    self.regVolumesSelector.setToolTip( "Pick the input to the algorithm." )
+    regFormLayout.addRow("Moving Volumes: ", self.regVolumesSelector)
+    
+    #
+    # Apply Button
+    #
+    self.registerButton = qt.QPushButton("Register")
+    self.registerButton.toolTip = "Register Images"
+    self.registerButton.enabled = False
+    regFormLayout.addRow(self.registerButton)
+
+    # Connections before scene
+    self.registerButton.connect('clicked(bool)', self.onRegisterButton)
+    self.regTargetSelector.connect("currentNodeChanged(vtkMRMLNode*)", self.onTargetSelected)
+    
+    # Set MRML scenes
+    self.regVolumesSelector.setMRMLScene( slicer.mrmlScene )
+    self.regTargetSelector.setMRMLScene( slicer.mrmlScene )
+    
+  def createMaskFrame(self):
     #
     # Parameters Area
     #
@@ -98,14 +194,6 @@ class FlexCropWidget:
 
     # Layout within the dummy collapsible button
     parametersFormLayout = qt.QFormLayout(parametersCollapsibleButton)
-
-    def set_selector_options(node):
-        node.selectNodeUponCreation = True
-        node.addEnabled = False
-        node.removeEnabled = False
-        node.noneEnabled = False
-        node.showHidden = False
-        node.showChildNodeTypes = False
         
     #
     # input volume selector
@@ -113,7 +201,7 @@ class FlexCropWidget:
     self.nodeSelector = slicer.qMRMLCheckableNodeComboBox()
     self.nodeSelector.nodeTypes = ( ("vtkMRMLScalarVolumeNode"), "" )
     self.nodeSelector.addAttribute( "vtkMRMLScalarVolumeNode", "LabelMap", 0 )
-    set_selector_options(self.nodeSelector)
+    self.set_selector_options(self.nodeSelector)
     self.nodeSelector.setMRMLScene( slicer.mrmlScene )
     self.nodeSelector.setToolTip( "Pick the input to the algorithm." )
     parametersFormLayout.addRow("Input Volumes: ", self.nodeSelector)
@@ -124,7 +212,7 @@ class FlexCropWidget:
     self.roiSelector = slicer.qMRMLNodeComboBox()
     self.roiSelector.nodeTypes = ( ("vtkMRMLAnnotationROINode"), "" )
     #self.roiSelector.addAttribute( "vtkMRMLScalarVolumeNode", "LabelMap", 0 )
-    set_selector_options(self.roiSelector)
+    self.set_selector_options(self.roiSelector)
     self.roiSelector.setMRMLScene( slicer.mrmlScene )
     self.roiSelector.setToolTip( "Pick the ROI for the masking." )
     parametersFormLayout.addRow("Mask ROI: ", self.roiSelector)
@@ -176,32 +264,6 @@ class FlexCropWidget:
     helperFormLayout.addRow(self.clearImagesButton)
     self.clearImagesButton.connect('clicked(bool)', self.onClearMaskedButton)
     
-    # Add vertical spacer
-    self.layout.addStretch(1)
-
-  def cleanup(self):
-    pass
-
-  def onClearMaskedButton(self):
-    nodes = slicer.util.getNodes("vtkMRMLScalarVolumeNode*")
-    for n in nodes:
-        if "masked" in n:
-            slicer.mrmlScene.RemoveNode(nodes[n])
-
-  def onClearUnmaskedButton(self):
-    nodes = slicer.util.getNodes("vtkMRMLScalarVolumeNode*")
-    for n in nodes:
-        if not "masked" in n:
-            slicer.mrmlScene.RemoveNode(nodes[n])
-            
-  def onSelect(self):
-    self.applyButton.enabled = self.nodeSelector.currentNode()
-
-  def onApplyButton(self):
-    logic = FlexCropLogic()
-    inPlace = self.inPlaceCheckBox.checked
-    logic.run(self.roiSelector.currentNode(), self.nodeSelector.checkedNodes(), inPlace)
-
 ################################################################################
 # Logic
 ################################################################################
@@ -242,7 +304,7 @@ class FlexCropLogic:
     qt.QTimer.singleShot(msec, self.info.close)
     self.info.exec_()
 
-  def run(self,roiNode,inputVolumes,inPlace):
+  def runMasking(self,roiNode,inputVolumes,inPlace):
     """
     Run the actual algorithm
     """
@@ -255,7 +317,44 @@ class FlexCropLogic:
     return True
 
     self.delayDisplay('Running the aglorithm')
+
+  def runRegistration(self,targetVol,movingVolumes):
+    """
+    Run the registration
+    """
+
+    self.delayDisplay('Running the algorithm')
+
+    for movingVol in movingVolumes:
+        self.registerVolumes(targetVol, movingVol)
+
+    return True
+
+    self.delayDisplay('Running registration')    
+
+  def registerVolumes(self, targetVol, movingVol):
+ 
+    # Set up transformations
+    tfmName = movingVol.GetName() + " ---TO--- " + targetVol.GetName()
+    tfmNode = movingVol.GetParentTransformNode()
+    if tfmNode == None or (tfmNode != None and tfmNode.GetName() != tfmName):
+      nodeFactory = slicer.qMRMLNodeFactory()
+      nodeFactory.setMRMLScene(slicer.mrmlScene)
+      tfmNode = nodeFactory.createNode('vtkMRMLLinearTransformNode')
+      tfmNode.SetName(tfmName)
+      movingVol.SetAndObserveTransformNodeID(tfmNode.GetID())
     
+    # Brainsfit parameters
+    parameters = {}
+    parameters['fixedVolume'] = targetVol
+    parameters['movingVolume'] = movingVol
+    parameters['outputTransform'] = tfmNode.GetID()
+    parameters['initializeTransformMode'] = 'useMomentsAlign'
+    parameters['useRigid'] = True
+    
+    brainsFit = slicer.modules.brainsfit
+    cliNode = slicer.cli.run(brainsFit, None, parameters, wait_for_completion = True)
+
   def maskVolume(self, volumeIn, roiNode, inPlace=False):
     # Clone input volume, unless inPlace
     inPlace = False # TODO: make this work
