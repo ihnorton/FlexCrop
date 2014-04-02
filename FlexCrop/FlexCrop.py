@@ -125,7 +125,7 @@ class FlexCropWidget:
   def onApplyButton(self):
     logic = FlexCropLogic()
     inPlace = self.inPlaceCheckBox.checked
-    logic.run(self.roiSelector.currentNode(), self.nodeSelector.checkedNodes(), inPlace)
+    logic.runMasking(self.roiSelector.currentNode(), self.nodeSelector.checkedNodes(), inPlace)
 
   def onTargetSelected(self, node):
     # apparently this has no effect
@@ -142,7 +142,7 @@ class FlexCropWidget:
     # Parameters Area
     #
     regCollapsibleButton = ctk.ctkCollapsibleButton()
-    regCollapsibleButton.text = "Parameters"
+    regCollapsibleButton.text = "Group Registration"
     self.layout.addWidget(regCollapsibleButton)
 
     # Layout within the dummy collapsible button
@@ -251,7 +251,7 @@ class FlexCropWidget:
     #
     # Clear Unmasked Images Button
     #
-    self.clearImagesButton = qt.QPushButton("Clear Unmasked Images")
+    self.clearImagesButton = qt.QPushButton("Remove Unmasked Images From Scene")
     self.clearImagesButton.toolTip = "Remove unmasked from scene."
     helperFormLayout.addRow(self.clearImagesButton)
     self.clearImagesButton.connect('clicked(bool)', self.onClearUnmaskedButton)
@@ -259,7 +259,7 @@ class FlexCropWidget:
     #
     # Clear Masked Images Button
     #
-    self.clearImagesButton = qt.QPushButton("Clear Masked Images")
+    self.clearImagesButton = qt.QPushButton("Remove Masked Images From Scene")
     self.clearImagesButton.toolTip = "Remove masked from scene."
     helperFormLayout.addRow(self.clearImagesButton)
     self.clearImagesButton.connect('clicked(bool)', self.onClearMaskedButton)
